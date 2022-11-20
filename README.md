@@ -3,7 +3,7 @@ Hard disk SMART Monitor on Domoticz
 
 This plugin monitors raw values of SMART attributes of HDDs/SSDs:
 
-* Based on https://github.com/febalci/DomoticzSNMP
+* Thanks to https://github.com/febalci/DomoticzSNMP
 
 ## Installation
 1. On Domoticz install pySMART: sudo pip3 install pySMART
