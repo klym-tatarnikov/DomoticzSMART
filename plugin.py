@@ -7,13 +7,20 @@
         <h3>Installation:</h3><br/>
         pySMART Python3 module should be installed first:<br/>
             pip3 install pySMART<br/>
-        also smartmontools needs to be installed:<br/>
-            apt-get install smartmontools
+        also smartmontools and hdparm needs to be installed:<br/>
+            apt-get install smartmontools hdparm
         <br/>
     </description>
     <params>
         <param field="Address" label="Disk path" width="250px" required="true" default="/dev/sda"/>
+        <param field="Mode1" label="Drive type ('ata', 'csmi', 'sas', 'sat', 'sata', 'scsi' or empty for automatic select)" width="75px" default=""/>
         <param field="Mode4" label="Check Interval (minutes)" width="75px" required="true" default="1"/>
+        <param field="Mode5" label="Skip SMART checking if drive is in standby" width="75px">
+            <options>
+                <option label="True" value="Skip"/>
+                <option label="False" value="Normal"  default="true" />
+            </options>
+        </param>
         <param field="Mode6" label="Debug" width="75px">
             <options>
                 <option label="True" value="Debug"/>
@@ -40,10 +47,27 @@ class BasePlugin:
 
     enabled = False
 
+    
     def __init__(self):
         self.pollPeriod = 0
         self.pollCount = 0
         return
+
+    def checkStandby(self):
+        if Parameters["Mode5"] == "Normal":
+            return False
+        try:
+            output = subprocess.check_output(["hdparm", "-C", self.DEVICEPATH])
+            Domoticz.Debug("drive state:" + str(output))       
+        except subprocess.CalledProcessError:
+            Domoticz.Error("hdparm command failed...")
+       
+        except Exception as e:
+            Domoticz.Error(e)
+        if "standby" in str(output):
+            return True
+        return False
+
 
     def onStart(self):
         Domoticz.Log("onStart called")
@@ -51,8 +75,14 @@ class BasePlugin:
             Domoticz.Debugging(1)
             
         self.DEVICEPATH = Parameters["Address"]
+        self.interface = Parameters["Mode1"]
+        if str(self.interface)=="":
+            self.interface = None
 
-        smartDevice = Device(self.DEVICEPATH)
+        if self.checkStandby():
+            return
+
+        smartDevice = Device(self.DEVICEPATH, self.interface)
         Domoticz.Log(smartDevice)
         smartAttributes = smartDevice.attributes
        
@@ -93,7 +123,11 @@ class BasePlugin:
     def onHeartbeat(self):
         Domoticz.Debug("onHeartBeat called:"+str(self.pollCount)+"/"+str(self.pollPeriod))
         if self.pollCount >= self.pollPeriod:
-            smartDevice = Device(self.DEVICEPATH)
+            if self.checkStandby():
+                Domoticz.Debug("Drive is idle. Skip SMART check")
+                return
+
+            smartDevice = Device(self.DEVICEPATH, self.interface)
             Domoticz.Debug("Reading SMART for" + str(smartDevice))
             smartAttributes = smartDevice.attributes
             for attribute in smartAttributes:
